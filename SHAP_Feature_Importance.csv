@@ -1,0 +1,15 @@
+Feature,Mean_SHAP_Impact
+AlertTitle,0.5802629
+Category,0.19916183
+MitreTechniques,0.17171924
+CountryCode,0.13093956
+DayOfWeek,0.09112223
+Hour,0.079452865
+EntityType,0.07935502
+LastVerdict,0.076576665
+Month,0.041999448
+EvidenceRole,0.021974606
+SuspicionLevel,0.0138468165
+OSVersion,0.0032096005
+OSFamily,0.002579885
+ThreatFamily,0.0023268422

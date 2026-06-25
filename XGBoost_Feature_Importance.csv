@@ -1,0 +1,15 @@
+Feature,Importance
+LastVerdict,0.16843356
+AlertTitle,0.15542369
+Month,0.11429633
+MitreTechniques,0.101420075
+CountryCode,0.096194245
+Category,0.09491348
+SuspicionLevel,0.058179013
+EntityType,0.043577835
+EvidenceRole,0.03640254
+DayOfWeek,0.030191826
+OSFamily,0.027278991
+Hour,0.02604201
+OSVersion,0.024635375
+ThreatFamily,0.023011044
