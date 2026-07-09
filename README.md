@@ -1,0 +1,2 @@
+# AI-Powered-Security-Operations-Platform-for-Threat-Detection-Alert-Triage-and-Incident-Investigation
+The AI-Powered Security Operations Platform uses AI and machine learning to analyze security telemetry, detect potential threats, and prioritize security alerts. It supports incident investigation with explainable insights, helping SOC analysts reduce alert fatigue and respond to threats more efficiently.
