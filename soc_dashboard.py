@@ -13,8 +13,15 @@ Modules:
 - Investigation Report
 - Threat Intelligence Dashboard
 """
-
 from __future__ import annotations
+
+import os
+import joblib
+import pandas as pd
+import plotly.express as px
+
+from authentication_predict import predict_authentication
+
 
 import datetime as dt
 import hashlib
@@ -37,7 +44,8 @@ import requests
 import streamlit as st
 from xgboost import XGBClassifier
 
-from authentication_monitor import evaluate_login, generate_dataframe
+
+
 
 try:
     import whois
@@ -49,9 +57,16 @@ warnings.filterwarnings("ignore", category=requests.packages.urllib3.exceptions.
 from pathlib import Path
 
 APP_DIR = Path(__file__).resolve().parent
+AUTH_MODEL_PATH = APP_DIR / "C:\\Users\\Administrator\\OneDrive\\Documents\\3rd sem\\project Lab\\AI-Powered-Security-Operations-Platform-for-Threat-Detection-Alert-Triage-and-Incident-Investigation\\models\\authentication_xgboost_model.pkl"
 
-URL_MODEL_PATH = APP_DIR / "url_xgboost_model.pkl"
-URL_LABEL_ENCODER_PATH = APP_DIR / "url_label_encoder.pkl"
+AUTH_FEATURES_PATH = APP_DIR / "C:\\Users\\Administrator\\OneDrive\\Documents\\3rd sem\\project Lab\\AI-Powered-Security-Operations-Platform-for-Threat-Detection-Alert-Triage-and-Incident-Investigation\\models\\authentication_feature_names.pkl"
+
+AUTH_ENCODER_PATH = APP_DIR / "C:\\Users\\Administrator\\OneDrive\\Documents\\3rd sem\\project Lab\\AI-Powered-Security-Operations-Platform-for-Threat-Detection-Alert-Triage-and-Incident-Investigation\\models\\authentication_label_encoder.pkl"
+
+AUTH_ALERT_FILE = APP_DIR / "C:\\Users\\Administrator\\OneDrive\\Documents\\3rd sem\\project Lab\\AI-Powered-Security-Operations-Platform-for-Threat-Detection-Alert-Triage-and-Incident-Investigation\\outputs\\windows_event_alerts.csv"
+
+URL_MODEL_PATH = APP_DIR / "C:\\Users\\Administrator\\OneDrive\\Documents\\3rd sem\\project Lab\\AI-Powered-Security-Operations-Platform-for-Threat-Detection-Alert-Triage-and-Incident-Investigation\\url_xgboost_model.pkl"
+URL_LABEL_ENCODER_PATH = APP_DIR / "C:\\Users\\Administrator\\OneDrive\\Documents\\3rd sem\\project Lab\\AI-Powered-Security-Operations-Platform-for-Threat-Detection-Alert-Triage-and-Incident-Investigation\\url_label_encoder.pkl"
 URL_FEATURE_NAMES = [
     "url_length",
     "domain_length",
@@ -174,7 +189,7 @@ def init_session_state() -> None:
         "url_model_source": "",
         "scan_result": None,
         "assessments": [],
-        "auth_logs": [],
+        
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -415,6 +430,10 @@ def model_frame(features: dict[str, Any]) -> pd.DataFrame:
 
 
 def predict_url(model: XGBClassifier, features: dict[str, Any]) -> dict[str, Any]:
+    print("=" * 60)
+    print("URL_FEATURE_NAMES")
+    print(URL_FEATURE_NAMES)
+    print("Count:", len(URL_FEATURE_NAMES))
 
     frame = model_frame(features)
 
@@ -586,7 +605,28 @@ def run_scan(url: str) -> None:
     finally:
         progress.empty()
 
+@st.cache_data(ttl=5)
+def load_authentication_alerts():
 
+    if not AUTH_ALERT_FILE.exists():
+
+        return pd.DataFrame()
+
+    try:
+
+        df = pd.read_csv(AUTH_ALERT_FILE)
+
+        if "Timestamp" in df.columns:
+
+            df["Timestamp"] = pd.to_datetime(df["Timestamp"])
+
+        return df
+
+    except Exception as e:
+
+        st.error(f"Unable to load authentication alerts: {e}")
+
+        return pd.DataFrame()
 def render_sidebar() -> str:
     with st.sidebar:
         st.title("CyberShield")
@@ -595,14 +635,14 @@ def render_sidebar() -> str:
         page = st.radio(
             "Navigation",
             [
-                "Executive Overview",
-                "URL Scanner",
-                "Threat Detection",
-                "Authentication Monitoring",
-                "SHAP Explainability",
-                "Vulnerability Assessment",
-                "Investigation Report",
-                "Threat Intelligence",
+                "🏠 Executive Overview",
+                "🌐 URL Threat Detection",
+                "🔐 Authentication Monitoring",
+                "📈 Threat Intelligence",
+                "📊 SHAP Explainability",
+                "🛡 Vulnerability Assessment",
+                "📄 Investigation Report",
+                "⚙ System Status",
             ],
         )
 
@@ -621,7 +661,88 @@ def render_sidebar() -> str:
 
 def section(title: str) -> None:
     st.markdown(f'<div class="section-title">{title}</div>', unsafe_allow_html=True)
+def page_system_status():
 
+    section("System Status")
+
+    st.subheader("Application Components")
+
+    components = [
+
+        [
+            "URL XGBoost Model",
+            URL_MODEL_PATH.exists()
+        ],
+
+        [
+            "Authentication XGBoost Model",
+            AUTH_MODEL_PATH.exists()
+        ],
+
+        [
+            "Authentication Alerts",
+            AUTH_ALERT_FILE.exists()
+        ],
+
+        [
+            "URL Label Encoder",
+            URL_LABEL_ENCODER_PATH.exists()
+        ],
+
+        [
+            "Authentication Label Encoder",
+            AUTH_ENCODER_PATH.exists()
+        ]
+
+    ]
+
+    df = pd.DataFrame(
+
+        components,
+
+        columns=[
+
+            "Component",
+
+            "Available"
+
+        ]
+
+    )
+
+    st.dataframe(
+
+        df,
+
+        use_container_width=True,
+
+        hide_index=True
+
+    )
+
+    st.subheader("Project Information")
+
+    st.info(
+        """
+CyberShield SOC Platform
+
+Version : 2.0
+
+Modules
+
+• URL Threat Detection (XGBoost)
+
+• Authentication Threat Detection (XGBoost)
+
+• SHAP Explainability
+
+• Vulnerability Assessment
+
+• Threat Intelligence
+
+• Investigation Reports
+"""
+    )
 
 def render_metric(label: str, value: str, help_text: str = "") -> None:
     st.markdown(
@@ -691,32 +812,234 @@ def chart_vulnerabilities(vulnerabilities: list[dict[str, str]]) -> go.Figure:
 
 
 def page_overview() -> None:
+
     section("Executive Overview")
 
-    assessments = st.session_state["assessments"]
-    auth_logs = st.session_state["auth_logs"]
+    # ==========================================================
+    # Load Data
+    # ==========================================================
 
-    total = len(assessments)
-    high = sum(1 for item in assessments if item["risk_label"] == "High Risk")
-    medium = sum(1 for item in assessments if item["risk_label"] == "Medium Risk")
-    low = sum(1 for item in assessments if item["risk_label"] == "Low Risk")
+    url_assessments = st.session_state.get("assessments", [])
 
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        render_metric("Total URL Scans", str(total))
-    with col2:
-        render_metric("High Risk URLs", str(high))
-    with col3:
-        render_metric("Medium Risk URLs", str(medium))
-    with col4:
-        render_metric("Auth Events", str(len(auth_logs)))
+    auth_df = load_authentication_alerts()
 
-    fig = chart_risk_trend(assessments)
-    if fig:
-        st.plotly_chart(fig, use_container_width=True)
+    total_url_scans = len(url_assessments)
+
+    total_auth_events = len(auth_df)
+
+    high_url = sum(
+        1
+        for item in url_assessments
+        if item["risk_label"] == "High Risk"
+    )
+
+    medium_url = sum(
+        1
+        for item in url_assessments
+        if item["risk_label"] == "Medium Risk"
+    )
+
+    low_url = sum(
+        1
+        for item in url_assessments
+        if item["risk_label"] == "Low Risk"
+    )
+
+    high_auth = 0
+    critical_auth = 0
+
+    if not auth_df.empty and "Risk" in auth_df.columns:
+
+        high_auth = len(
+            auth_df[auth_df["Risk"] == "High"]
+        )
+
+        critical_auth = len(
+            auth_df[auth_df["Risk"] == "Critical"]
+        )
+
+    # ==========================================================
+    # KPI Cards
+    # ==========================================================
+
+    c1, c2, c3, c4 = st.columns(4)
+
+    c1.metric(
+        "URL Scans",
+        total_url_scans
+    )
+
+    c2.metric(
+        "Authentication Events",
+        total_auth_events
+    )
+
+    c3.metric(
+        "High URL Threats",
+        high_url
+    )
+
+    c4.metric(
+        "Critical Auth Alerts",
+        critical_auth
+    )
+
+    st.divider()
+
+    # ==========================================================
+    # Risk Comparison
+    # ==========================================================
+
+    left, right = st.columns(2)
+
+    with left:
+
+        st.subheader("URL Threat Distribution")
+
+        if total_url_scans > 0:
+
+            url_chart = pd.DataFrame({
+
+                "Risk": [
+                    "High",
+                    "Medium",
+                    "Low"
+                ],
+
+                "Count": [
+                    high_url,
+                    medium_url,
+                    low_url
+                ]
+
+            })
+
+            fig = px.pie(
+                url_chart,
+                names="Risk",
+                values="Count",
+                hole=0.45,
+                title="URL Threats"
+            )
+
+            st.plotly_chart(
+                fig,
+                use_container_width=True
+            )
+
+        else:
+
+            st.info("No URL scans available.")
+
+    with right:
+
+        st.subheader("Authentication Risk Distribution")
+
+        if (
+            not auth_df.empty
+            and "Risk" in auth_df.columns
+        ):
+
+            auth_chart = (
+
+                auth_df["Risk"]
+
+                .value_counts()
+
+                .reset_index()
+
+            )
+
+            auth_chart.columns = [
+
+                "Risk",
+
+                "Count"
+
+            ]
+
+            fig = px.bar(
+
+                auth_chart,
+
+                x="Risk",
+
+                y="Count",
+
+                text="Count",
+
+                title="Authentication Alerts"
+
+            )
+
+            st.plotly_chart(
+
+                fig,
+
+                use_container_width=True
+
+            )
+
+        else:
+
+            st.info("No authentication alerts available.")
+
+    st.divider()
+
+    # ==========================================================
+    # Recent Activity
+    # ==========================================================
+
+    st.subheader("Recent Authentication Alerts")
+
+    if auth_df.empty:
+
+        st.info("No authentication events.")
+
     else:
-        st.info("Run a URL scan to populate the dashboard.")
 
+        preview = auth_df.copy()
+
+        if "Timestamp" in preview.columns:
+
+            preview = preview.sort_values(
+                by="Timestamp",
+                ascending=False
+            )
+
+        st.dataframe(
+
+            preview.head(10),
+
+            use_container_width=True,
+
+            hide_index=True
+
+        )
+
+    st.divider()
+
+    # ==========================================================
+    # Recent URL Assessments
+    # ==========================================================
+
+    st.subheader("Recent URL Assessments")
+
+    if total_url_scans == 0:
+
+        st.info("No URL assessments.")
+
+    else:
+
+        st.dataframe(
+
+            pd.DataFrame(url_assessments).tail(10),
+
+            use_container_width=True,
+
+            hide_index=True
+
+        )
 
 def page_scanner() -> None:
     section("URL Scanner")
@@ -838,76 +1161,183 @@ def page_threat_detection() -> None:
 
 
 def page_authentication() -> None:
-    section("Authentication Monitoring")
-    st.caption("Authentication monitoring is rule-based and independent from the URL XGBoost model.")
+    section("Authentication Threat Detection")
 
-    with st.form("auth_form"):
-        col1, col2 = st.columns(2)
-
-        with col1:
-            username = st.text_input("Username", placeholder="jsmith")
-            ip = st.text_input("IP Address", placeholder="192.168.1.25")
-            country = st.text_input("Country", placeholder="US")
-            login_time = st.text_input("Login Time (HH:MM)", "09:30")
-
-        with col2:
-            failed_attempts = st.slider("Failed Login Attempts", 0, 20, 0)
-            new_device = st.checkbox("New Device")
-            privileged = st.checkbox("Privileged Account")
-            malicious_ip = st.checkbox("Known Malicious IP")
-            multiple_locations = st.checkbox("Multiple Login Locations")
-            impossible_travel = st.checkbox("Impossible Travel")
-            account_locked = st.checkbox("Account Locked")
-
-        submitted = st.form_submit_button("Analyze Login", type="primary")
-
-    if not submitted:
-        return
-
-    try:
-        dt.datetime.strptime(login_time.strip(), "%H:%M")
-    except ValueError:
-        st.error("Login time must be in HH:MM format.")
-        return
-
-    result = evaluate_login(
-        username,
-        ip,
-        country,
-        login_time.strip(),
-        failed_attempts,
-        new_device,
-        privileged,
-        malicious_ip,
-        multiple_locations,
-        impossible_travel,
-        account_locked,
+    st.caption(
+        "Live authentication monitoring using the XGBoost authentication model."
     )
 
-    st.metric("Risk Score", result["Risk Score"])
-    st.metric("Severity", result["Severity"])
-    st.metric("Status", result["Status"])
+    df = load_authentication_alerts()
 
-    findings = result.get("Findings", [])
-    if findings:
-        for finding in findings:
-            st.warning(finding)
-    else:
-        st.success("No suspicious authentication indicators detected.")
+    if df.empty:
+        st.warning("No authentication alerts available.")
+        st.info(
+            "Run windows_event_monitor.py to generate authentication events."
+        )
+        return
 
-    report = generate_dataframe(result)
-    st.dataframe(report, use_container_width=True, hide_index=True)
+    # -------------------------------------------------------
+    # KPI Cards
+    # -------------------------------------------------------
 
-    st.session_state["auth_logs"].append({
-        "username": username,
-        "ip": ip,
-        "country": country,
-        "severity": result["Severity"],
-        "risk_score": result["Risk Score"],
-        "status": result["Status"],
-        "timestamp": dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"),
-    })
+    total_events = len(df)
 
+    high_risk = (
+        len(df[df["Risk"] == "High"])
+        if "Risk" in df.columns
+        else 0
+    )
+
+    critical = (
+        len(df[df["Risk"] == "Critical"])
+        if "Risk" in df.columns
+        else 0
+    )
+
+    avg_confidence = (
+        round(df["Confidence"].mean(), 2)
+        if "Confidence" in df.columns
+        else 0
+    )
+
+    c1, c2, c3, c4 = st.columns(4)
+
+    c1.metric("Total Events", total_events)
+    c2.metric("Critical Alerts", critical)
+    c3.metric("High Risk", high_risk)
+    c4.metric("Avg Confidence", f"{avg_confidence}%")
+
+    st.divider()
+
+    # -------------------------------------------------------
+    # Charts
+    # -------------------------------------------------------
+
+    left, right = st.columns(2)
+
+    with left:
+
+        st.subheader("Risk Distribution")
+
+        if "Risk" in df.columns:
+
+            risk = (
+                df["Risk"]
+                .value_counts()
+                .reset_index()
+            )
+
+            risk.columns = ["Risk", "Count"]
+
+            fig = px.pie(
+                risk,
+                names="Risk",
+                values="Count",
+                hole=0.45
+            )
+
+            st.plotly_chart(
+                fig,
+                use_container_width=True
+            )
+
+    with right:
+
+        st.subheader("Prediction Distribution")
+
+        if "Prediction" in df.columns:
+
+            pred = (
+                df["Prediction"]
+                .value_counts()
+                .reset_index()
+            )
+
+            pred.columns = ["Prediction", "Count"]
+
+            fig = px.bar(
+                pred,
+                x="Prediction",
+                y="Count",
+                text="Count"
+            )
+
+            st.plotly_chart(
+                fig,
+                use_container_width=True
+            )
+
+    st.divider()
+
+    # -------------------------------------------------------
+    # Timeline
+    # -------------------------------------------------------
+
+    if "Timestamp" in df.columns:
+
+        st.subheader("Authentication Timeline")
+
+        timeline = df.copy()
+
+        timeline["Minute"] = (
+            timeline["Timestamp"]
+            .dt.floor("min")
+        )
+
+        timeline = (
+            timeline
+            .groupby("Minute")
+            .size()
+            .reset_index(name="Events")
+        )
+
+        fig = px.line(
+            timeline,
+            x="Minute",
+            y="Events",
+            markers=True
+        )
+
+        st.plotly_chart(
+            fig,
+            use_container_width=True
+        )
+
+    st.divider()
+
+    # -------------------------------------------------------
+    # Recent Alerts
+    # -------------------------------------------------------
+
+    st.subheader("Recent Authentication Alerts")
+
+    table = df.copy()
+
+    if "Timestamp" in table.columns:
+
+        table["Timestamp"] = (
+            table["Timestamp"]
+            .astype(str)
+        )
+
+    st.dataframe(
+        table.sort_values(
+            by="Timestamp",
+            ascending=False
+        ),
+        use_container_width=True,
+        hide_index=True,
+        height=500
+    )
+
+    csv = table.to_csv(index=False).encode("utf-8")
+
+    st.download_button(
+        "Download Authentication Alerts",
+        data=csv,
+        file_name="authentication_alerts.csv",
+        mime="text/csv"
+    )
 
 def page_shap() -> None:
     section("SHAP Explainability")
@@ -1012,28 +1442,366 @@ def page_report() -> None:
 
 
 def page_intelligence() -> None:
+
     section("Threat Intelligence")
 
-    assessments = st.session_state["assessments"]
-    if not assessments:
-        st.info("No intelligence data yet.")
-        return
+    url_data = st.session_state.get("assessments", [])
 
-    frame = pd.DataFrame(assessments)
+    auth_df = load_authentication_alerts()
 
-    risk_counts = frame["risk_label"].value_counts().reindex(RISK_LABELS, fill_value=0)
+    # =====================================================
+    # Overall Statistics
+    # =====================================================
 
-    fig = go.Figure(go.Pie(
-        labels=risk_counts.index,
-        values=risk_counts.values,
-        marker_colors=[RISK_COLORS[label] for label in risk_counts.index],
-        hole=0.45,
-    ))
-    fig.update_layout(height=320)
-    st.plotly_chart(fig, use_container_width=True)
+    total_url = len(url_data)
+    total_auth = len(auth_df)
 
-    st.dataframe(frame.tail(100), use_container_width=True, hide_index=True)
+    total_events = total_url + total_auth
 
+    st.subheader("SOC Threat Summary")
+
+    c1, c2, c3 = st.columns(3)
+
+    c1.metric(
+        "URL Threats",
+        total_url
+    )
+
+    c2.metric(
+        "Authentication Threats",
+        total_auth
+    )
+
+    c3.metric(
+        "Total Threat Events",
+        total_events
+    )
+
+    st.divider()
+
+    # =====================================================
+    # URL Threat Intelligence
+    # =====================================================
+
+    left, right = st.columns(2)
+
+    with left:
+
+        st.subheader("URL Risk Distribution")
+
+        if total_url:
+
+            url_df = pd.DataFrame(url_data)
+
+            counts = (
+
+                url_df["risk_label"]
+
+                .value_counts()
+
+                .reset_index()
+
+            )
+
+            counts.columns = [
+
+                "Risk",
+
+                "Count"
+
+            ]
+
+            fig = px.pie(
+
+                counts,
+
+                names="Risk",
+
+                values="Count",
+
+                hole=0.45
+
+            )
+
+            st.plotly_chart(
+
+                fig,
+
+                use_container_width=True
+
+            )
+
+        else:
+
+            st.info("No URL intelligence available.")
+
+    with right:
+
+        st.subheader("Authentication Risk Distribution")
+
+        if (
+
+            not auth_df.empty
+
+            and "Risk" in auth_df.columns
+
+        ):
+
+            counts = (
+
+                auth_df["Risk"]
+
+                .value_counts()
+
+                .reset_index()
+
+            )
+
+            counts.columns = [
+
+                "Risk",
+
+                "Count"
+
+            ]
+
+            fig = px.bar(
+
+                counts,
+
+                x="Risk",
+
+                y="Count",
+
+                text="Count"
+
+            )
+
+            st.plotly_chart(
+
+                fig,
+
+                use_container_width=True
+
+            )
+
+        else:
+
+            st.info("No authentication intelligence available.")
+
+    st.divider()
+
+    # =====================================================
+    # Authentication Prediction Distribution
+    # =====================================================
+
+    st.subheader("Authentication Prediction Distribution")
+
+    if (
+
+        not auth_df.empty
+
+        and "Prediction" in auth_df.columns
+
+    ):
+
+        pred = (
+
+            auth_df["Prediction"]
+
+            .value_counts()
+
+            .reset_index()
+
+        )
+
+        pred.columns = [
+
+            "Prediction",
+
+            "Count"
+
+        ]
+
+        fig = px.bar(
+
+            pred,
+
+            x="Prediction",
+
+            y="Count",
+
+            text="Count",
+
+            color="Prediction"
+
+        )
+
+        st.plotly_chart(
+
+            fig,
+
+            use_container_width=True
+
+        )
+
+    else:
+
+        st.info("Prediction data unavailable.")
+
+    st.divider()
+
+    # =====================================================
+    # Authentication Confidence
+    # =====================================================
+
+    st.subheader("Authentication Confidence")
+
+    if (
+
+        not auth_df.empty
+
+        and "Confidence" in auth_df.columns
+
+    ):
+
+        fig = px.histogram(
+
+            auth_df,
+
+            x="Confidence",
+
+            nbins=20
+
+        )
+
+        st.plotly_chart(
+
+            fig,
+
+            use_container_width=True
+
+        )
+
+    else:
+
+        st.info("Confidence data unavailable.")
+
+    st.divider()
+
+    # =====================================================
+    # Recent Threats
+    # =====================================================
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+
+        st.subheader("Recent URL Threats")
+
+        if total_url:
+
+            st.dataframe(
+
+                pd.DataFrame(url_data).tail(10),
+
+                use_container_width=True,
+
+                hide_index=True
+
+            )
+
+        else:
+
+            st.info("No URL threats.")
+
+    with col2:
+
+        st.subheader("Recent Authentication Threats")
+
+        if not auth_df.empty:
+
+            table = auth_df.copy()
+
+            if "Timestamp" in table.columns:
+
+                table = table.sort_values(
+
+                    by="Timestamp",
+
+                    ascending=False
+
+                )
+
+            st.dataframe(
+
+                table.head(10),
+
+                use_container_width=True,
+
+                hide_index=True
+
+            )
+
+        else:
+
+            st.info("No authentication threats.")
+
+    st.divider()
+
+    # =====================================================
+    # Threat Intelligence Report
+    # =====================================================
+
+    report = pd.DataFrame({
+
+        "Category": [
+
+            "URL Threats",
+
+            "Authentication Threats",
+
+            "Total Threat Events"
+
+        ],
+
+        "Count": [
+
+            total_url,
+
+            total_auth,
+
+            total_events
+
+        ]
+
+    })
+
+    st.subheader("Threat Intelligence Summary")
+
+    st.dataframe(
+
+        report,
+
+        use_container_width=True,
+
+        hide_index=True
+
+    )
+
+    csv = report.to_csv(index=False).encode("utf-8")
+
+    st.download_button(
+
+        "Download Threat Intelligence Report",
+
+        data=csv,
+
+        file_name="threat_intelligence_report.csv",
+
+        mime="text/csv"
+
+    )
 
 def main() -> None:
     configure_page()
@@ -1047,14 +1815,29 @@ def main() -> None:
     page = render_sidebar()
 
     pages = {
-        "Executive Overview": page_overview,
-        "URL Scanner": page_scanner,
-        "Threat Detection": page_threat_detection,
-        "Authentication Monitoring": page_authentication,
-        "SHAP Explainability": page_shap,
-        "Vulnerability Assessment": page_vulnerability_assessment,
-        "Investigation Report": page_report,
-        "Threat Intelligence": page_intelligence,
+       "🏠 Executive Overview":
+        page_overview,
+
+    "🌐 URL Threat Detection":
+        page_scanner,
+
+    "🔐 Authentication Monitoring":
+        page_authentication,
+
+    "📈 Threat Intelligence":
+        page_intelligence,
+
+    "📊 SHAP Explainability":
+        page_shap,
+
+    "🛡 Vulnerability Assessment":
+        page_vulnerability_assessment,
+
+    "📄 Investigation Report":
+        page_report,
+
+    "⚙ System Status":
+        page_system_status
     }
 
     pages[page]()
@@ -1062,3 +1845,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+    
